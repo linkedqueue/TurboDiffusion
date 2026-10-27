@@ -80,6 +80,13 @@ pip install git+https://github.com/thu-ml/SpargeAttn.git --no-build-isolation
 ```
 
 
+## H3 FL2VA Inference
+
+H3 uses the same TurboDiffusion W8A8 Linear kernels, with its own 4-update DMD
+sampler, Sparge attention and optional conservative DBCache. The H3 model and
+pipeline are an external dependency. See [H3 inference](docs/h3_i2va.md)
+for checkpoints, installation and the `scripts/inference_h3_i2va.sh` entry point.
+
 ## Inference
 For GPUs with more than 40GB of GPU memory, **e.g., H100, please use the unquantized checkpoints (without `-quant`) and remove `--quant_linear` from the command. For RTX 5090, RTX 4090, or similar GPUs, please use the quantized checkpoints (with `-quant`) and add `--quant_linear` in the command.)**
 
