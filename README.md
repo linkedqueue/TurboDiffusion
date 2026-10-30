@@ -87,7 +87,7 @@ sampler, Sparge attention and optional conservative DBCache. The H3 model and
 pipeline are an external dependency. Download the full BF16 DMD transformer
 and matching AdaLN table from
 [liran12345/h3-turbo-diffusion](https://huggingface.co/liran12345/h3-turbo-diffusion),
-then export W8A8 locally; no LoRA merge is needed. See
+then export W8A8 locally from the full-parameter DMD checkpoint. See
 [H3 inference](docs/h3_i2va.md) for download/export commands, original FL2VA
 component requirements and the `scripts/inference_h3_i2va.sh` entry point.
 

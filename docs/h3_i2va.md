@@ -1,6 +1,6 @@
 # H3 FL2VA with TurboDiffusion W8A8
 
-This adapter runs the existing H3 image-to-video-with-audio pipeline using
+This integration runs the existing H3 image-to-video-with-audio pipeline using
 TurboDiffusion's native 128x128-block W8A8 Linear. The default `fullopt`
 profile performs **four DMD denoising updates** (`dit.steps: 5` is the number
 of sigma points) without DBCache. `fullopt-dbcache` keeps all the same
@@ -23,8 +23,8 @@ DMD source weights for `i2va / steps=5 / video_shift=12 / audio_shift=3`.
 The released checkpoint is
 [liran12345/h3-turbo-diffusion](https://huggingface.co/liran12345/h3-turbo-diffusion).
 It contains the **full BF16 four-update DMD transformer**, with the original
-small FP32 tensors preserved, and its matching AdaLN table. It is **not a
-LoRA, a LoRA-merged approximation or a pre-quantized W8A8 checkpoint**.
+small FP32 tensors preserved, and its matching AdaLN table. This is the
+**full-parameter DMD checkpoint**; export W8A8 locally from these weights.
 
 Using the Hugging Face CLI:
 
@@ -57,7 +57,7 @@ PYTHONPATH=/path/to/TurboDiffusion:. CUDA_VISIBLE_DEVICES=0 \
   -o /models/h3-turbo-diffusion/model_w8a8.safetensors
 ```
 
-No `--lora` argument or merge is needed. Reuse the downloaded AdaLN table
+The exporter quantizes the full DMD weights directly. Reuse the downloaded AdaLN table
 and its `.json` unchanged for `i2va / steps=5 / video_shift=12 / audio_shift=3`;
 **W8A8 export alone does not require re-baking AdaLN**. Do not reuse this table
 with different source weights or a different schedule.
@@ -110,30 +110,6 @@ of passing the four checkpoint paths individually. Relative checkpoint paths
 in H3 configs resolve against the H3 checkout; those in this repository's
 template resolve against this repository.
 
-## Experimental LoRA Alternative
-
-The rank-128 SVD adapter is experimental and **not yet published**. It is
-not included in the Hugging Face release above; use the full DMD workflow
-for the released model. For a separate **public FL2VA base + adapter**
-workflow, obtain the experimental adapter and its matching AdaLN table
-together, then merge the adapter before W8A8 quantization:
-
-```bash
-cd /path/to/h3-fast-infer
-PYTHONPATH=/path/to/TurboDiffusion:. CUDA_VISIBLE_DEVICES=0 \
-  python example/export_dit_turbo_int8.py \
-  -i /path/to/TurboDiffusion/configs/h3_i2va_w8a8.yaml \
-  --base-model-dir /path/to/MiniMax-H3/FL2VA/transformer \
-  --lora /path/to/adapter/model_rank128.safetensors \
-  -o /path/to/model_compact.safetensors
-```
-
-Run the command above in `Run` with `--dit-model-path` set to the *public*
-`FL2VA/transformer`, `--w8a8-path` set to the exported file and
-`--adaln-path` set to the adapter's matching table. This is not the trained
-LightX2V Turbo-SLA LoRA, nor a general PEFT/ComfyUI adapter. See the H3 checkout's
-`docs/dmd_lora.md` for its artifact layout, validation and constraints.
-
 Neither the DMD checkpoint nor the AdaLN table is converted in place. This
-adapter does not claim Wan2.2's end-to-end speedup: H3 has its own model,
+integration does not claim Wan2.2's end-to-end speedup: H3 has its own model,
 schedule and 8-GPU deployment envelope.

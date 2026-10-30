@@ -1,4 +1,4 @@
-"""CPU-only coverage for the external H3 W8A8 pipeline adapter."""
+"""CPU-only coverage for the external H3 full-model W8A8 pipeline integration."""
 from __future__ import annotations
 
 import tempfile

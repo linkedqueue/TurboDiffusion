@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run H3 FL2VA with TurboDiffusion W8A8 and optional conservative DBCache.
+"""Run the full H3 DMD model with TurboDiffusion W8A8 and optional conservative DBCache.
 
 H3 owns the model, conditioning, sampling and VAE; this entry point only
 orchestrates its existing stages and makes this repository's CUDA ops importable.
@@ -37,7 +37,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ), help="h3-fast-infer source checkout with the Turbo W8A8 integration")
     ap.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     ap.add_argument("--model-root", type=Path, help="upstream FL2VA shared text/video/audio encoders")
-    ap.add_argument("--dit-model-path", type=Path, help="DMD transformer checkpoint directory")
+    ap.add_argument("--dit-model-path", type=Path, help="full BF16 DMD transformer checkpoint directory")
     ap.add_argument("--w8a8-path", type=Path, help="exported H3 TurboDiffusion INT8 safetensors")
     ap.add_argument("--adaln-path", type=Path, help="matching i2va / 5-point AdaLN bake")
     ap.add_argument("--vae-int8-path", type=Path, help="Beacon video VAE decoder checkpoint")
