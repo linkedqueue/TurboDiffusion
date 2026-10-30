@@ -1,8 +1,8 @@
-# H3 FL2VA: DMD (5 sigma points / 4 updates), TurboDiffusion W8A8, no cache.
+# H3 FL2VA: DMD (5 sigma points / 4 updates), native W8A8, conservative DBCache.
 # Full DMD + AdaLN: https://huggingface.co/liran12345/h3-turbo-diffusion
 # Export W8A8 locally; see docs/h3_i2va.md for download and checkpoint paths.
-# Replace checkpoint paths with CLI flags or pass an existing H3 config.
-model_root: checkpoints/h3/shared
+# Replace checkpoint paths with CLI flags.
+model_root: checkpoints/MiniMax-H3/FL2VA
 text_encoder:
   backend: file
   engine: tp
@@ -12,9 +12,9 @@ text_encoder:
   text_dim: 5120
   apply_chat_template: false
 dit:
-  model_path: checkpoints/h3/dmd/transformer
-  turbo_int8_path: checkpoints/h3/dmd/model_compact.safetensors
-  adaln_bake_path: checkpoints/h3/dmd/adaln_i2va_s5_v12_a3.safetensors
+  model_path: checkpoints/h3-turbo-diffusion/transformer
+  turbo_int8_path: checkpoints/h3-turbo-diffusion/model_w8a8.safetensors
+  adaln_bake_path: checkpoints/h3-turbo-diffusion/adaln/adaln_i2va_s5_v12_a3.safetensors
   ulysses_degree: 8
   use_quant_comm: true
   use_async_comm: true
@@ -29,23 +29,20 @@ dit:
   video_shift: 12.0
   audio_shift: 3.0
   dbcache:
-    enabled: false
+    enabled: true
+    probe_only: false
+    Fn_compute_blocks: 8
+    Bn_compute_blocks: 4
+    max_warmup_steps: 1
+    max_continuous_cached_steps: 1
+    residual_diff_threshold: 0.20
+    enable_taylorseer: false
 vae:
+  video_decoder_precision: w8a8
   parallel_tiling: true
   sp_size: 8
   tile_size: 256
   tile_overlap_min: 64
-  int8_path: checkpoints/h3/vae/model_int8.safetensors
-  beacon_params:
-    beacon_mlp_enable: true
-    beacon_mlp_version: quant
-    beacon_mlp_full_quant: true
-    beacon_mlp_skip_qw: false
-    beacon_mlp_range: [0, 35]
-    beacon_linear_enable: false
-    beacon_linear_version: high_precision_v2
-    beacon_skip_prefixes: [encoder, token_refiner]
-    beacon_linear_ignore_layers: [x_embedder, proj_out, proj_in]
 sample:
   task: i2va
   short_edge: 768

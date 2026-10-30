@@ -82,9 +82,11 @@ pip install git+https://github.com/thu-ml/SpargeAttn.git --no-build-isolation
 
 ## H3 FL2VA Inference
 
-H3 uses the same TurboDiffusion W8A8 Linear kernels, with its own 4-update DMD
-sampler, Sparge attention and optional conservative DBCache. The H3 model and
-pipeline are an external dependency. Download the full BF16 DMD transformer
+H3 uses the same TurboDiffusion W8A8 Linear kernels for DiT and video VAE decoder
+blocks, with its own 4-update DMD sampler, Sparge attention and conservative
+DBCache enabled by default (`--profile fullopt` disables DBCache). The H3 model,
+sampler, multi-GPU runtime and W8A8 exporter are included in `turbodiffusion/h3`
+and `turbodiffusion/inference`. Download the full BF16 DMD transformer
 and matching AdaLN table from
 [liran12345/h3-turbo-diffusion](https://huggingface.co/liran12345/h3-turbo-diffusion),
 then export W8A8 locally from the full-parameter DMD checkpoint. See
