@@ -18,8 +18,63 @@ quality/latency comparison. The required H3 DiT export contains 200 quantized
 main-block projections, and uses an unchanged AdaLN table made from the same
 DMD source weights for `i2va / steps=5 / video_shift=12 / audio_shift=3`.
 
+## Download the Model
+
+The released checkpoint is
+[liran12345/h3-turbo-diffusion](https://huggingface.co/liran12345/h3-turbo-diffusion).
+It contains the **full BF16 four-update DMD transformer**, with the original
+small FP32 tensors preserved, and its matching AdaLN table. It is **not a
+LoRA, a LoRA-merged approximation or a pre-quantized W8A8 checkpoint**.
+
+Using the Hugging Face CLI:
+
+```bash
+hf download liran12345/h3-turbo-diffusion \
+  --local-dir /models/h3-turbo-diffusion
+```
+
+The download includes `transformer/` (34 shards, approximately 61.73 GiB),
+`adaln/adaln_i2va_s5_v12_a3.safetensors` and its companion `.json`, reference
+configs and a checksum manifest. Text encoder, tokenizer and video/audio VAEs
+are **not included**; obtain the original FL2VA components separately from
+[MiniMaxAI/MiniMax-H3](https://huggingface.co/MiniMaxAI/MiniMax-H3).
+The examples below use `/models/MiniMax-H3/FL2VA` as that component root.
+These weights use the
+[MiniMax H3 Community License Agreement](https://huggingface.co/liran12345/h3-turbo-diffusion/blob/main/LICENSE),
+not TurboDiffusion's code license; review its conditions before use.
+
+## Prepare W8A8 Weights
+
+The TurboDiffusion H3 entry point requires a local W8A8 export. After building
+the TurboDiffusion CUDA extension, use the exporter in the external H3 checkout:
+
+```bash
+cd /path/to/h3-fast-infer
+PYTHONPATH=/path/to/TurboDiffusion:. CUDA_VISIBLE_DEVICES=0 \
+  python example/export_dit_turbo_int8.py \
+  -i /path/to/TurboDiffusion/configs/h3_i2va_w8a8.yaml \
+  --base-model-dir /models/h3-turbo-diffusion/transformer \
+  -o /models/h3-turbo-diffusion/model_w8a8.safetensors
+```
+
+No `--lora` argument or merge is needed. Reuse the downloaded AdaLN table
+and its `.json` unchanged for `i2va / steps=5 / video_shift=12 / audio_shift=3`;
+**W8A8 export alone does not require re-baking AdaLN**. Do not reuse this table
+with different source weights or a different schedule.
+
+The default profile also requires a separately exported Beacon INT8 video VAE.
+In the same H3 checkout and environment:
+
+```bash
+PYTHONPATH=. CUDA_VISIBLE_DEVICES=0 \
+  python example/export_vae_int8.py \
+  --vae-dir /models/MiniMax-H3/FL2VA/video_vae \
+  -o /models/h3/video_vae_int8.safetensors
+```
+
 ## Run
 
+Run from the TurboDiffusion checkout after preparing the weights above.
 The source checkout defaults to a sibling `../h3-fast-infer`, or set
 `--h3-root`/`H3_ROOT`. Edit `configs/h3_i2va_w8a8.yaml` for your local
 checkpoints, or supply paths on the command line:
@@ -27,11 +82,11 @@ checkpoints, or supply paths on the command line:
 ```bash
 bash scripts/inference_h3_i2va.sh \
   --h3-root ../h3-fast-infer \
-  --model-root /path/to/MiniMax-H3/FL2VA \
-  --dit-model-path /path/to/i2v_dmd2-step4000/transformer \
-  --w8a8-path /path/to/model_compact.safetensors \
-  --adaln-path /path/to/adaln_i2va_s5_v12_a3.safetensors \
-  --vae-int8-path /path/to/video_vae/model_int8.safetensors \
+  --model-root /models/MiniMax-H3/FL2VA \
+  --dit-model-path /models/h3-turbo-diffusion/transformer \
+  --w8a8-path /models/h3-turbo-diffusion/model_w8a8.safetensors \
+  --adaln-path /models/h3-turbo-diffusion/adaln/adaln_i2va_s5_v12_a3.safetensors \
+  --vae-int8-path /models/h3/video_vae_int8.safetensors \
   --image /path/to/first-frame.png \
   --prompt 'Video description and soundscape...' \
   --output-dir output/h3_demo
@@ -55,16 +110,29 @@ of passing the four checkpoint paths individually. Relative checkpoint paths
 in H3 configs resolve against the H3 checkout; those in this repository's
 template resolve against this repository.
 
-Prepare weights using the external H3 exporter after building the
-TurboDiffusion CUDA extension:
+## Experimental LoRA Alternative
+
+The rank-128 SVD adapter is experimental and **not yet published**. It is
+not included in the Hugging Face release above; use the full DMD workflow
+for the released model. For a separate **public FL2VA base + adapter**
+workflow, obtain the experimental adapter and its matching AdaLN table
+together, then merge the adapter before W8A8 quantization:
 
 ```bash
 cd /path/to/h3-fast-infer
 PYTHONPATH=/path/to/TurboDiffusion:. CUDA_VISIBLE_DEVICES=0 \
   python example/export_dit_turbo_int8.py \
-  -i config/local_h3_i2va_dmd4_turbo.yaml \
+  -i /path/to/TurboDiffusion/configs/h3_i2va_w8a8.yaml \
+  --base-model-dir /path/to/MiniMax-H3/FL2VA/transformer \
+  --lora /path/to/adapter/model_rank128.safetensors \
   -o /path/to/model_compact.safetensors
 ```
+
+Run the command above in `Run` with `--dit-model-path` set to the *public*
+`FL2VA/transformer`, `--w8a8-path` set to the exported file and
+`--adaln-path` set to the adapter's matching table. This is not the trained
+LightX2V Turbo-SLA LoRA, nor a general PEFT/ComfyUI adapter. See the H3 checkout's
+`docs/dmd_lora.md` for its artifact layout, validation and constraints.
 
 Neither the DMD checkpoint nor the AdaLN table is converted in place. This
 adapter does not claim Wan2.2's end-to-end speedup: H3 has its own model,

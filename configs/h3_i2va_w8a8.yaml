@@ -1,4 +1,6 @@
 # H3 FL2VA: DMD (5 sigma points / 4 updates), TurboDiffusion W8A8, no cache.
+# Full DMD + AdaLN: https://huggingface.co/liran12345/h3-turbo-diffusion
+# Export W8A8 locally; see docs/h3_i2va.md for download and checkpoint paths.
 # Replace checkpoint paths with CLI flags or pass an existing H3 config.
 model_root: checkpoints/h3/shared
 text_encoder:
