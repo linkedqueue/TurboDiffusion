@@ -48,28 +48,43 @@ They do not use Wan's rCM schedule or SLA.
 
 ### SpargeAttn Compatibility
 
-**The default profiles currently require an H3-compatible SpargeAttn build
-whose public release is pending.** Installing public `thu-ml/SpargeAttn` alone
-does not provide the interface used by the local H3 validation:
+H3 uses the public [thu-ml/SpargeAttn](https://github.com/thu-ml/SpargeAttn)
+custom block-mask API, not a private H3-specific fork:
 
 ```python
-from sparge_attn import spas_sage2_attn_topk_cuda
+from spas_sage_attn import block_sparse_sage2_attn_cuda
 ```
 
-The required API accepts `scale`, `smooth_k`, `topk`, `pre_sink_length` and
-`post_sink_length`, together with the matching CUDA implementation. The sink
-regions preserve dense query/key block rows and columns for text, audio and
-first-frame conditioning tokens. The public main-branch interface
-`spas_sage_attn.spas_sage2_attn_meansim_topk_cuda` is not a verified drop-in
-replacement; changing only the import can change this behavior.
+The pinned public revision is `ae5b629ebb41e41f86b3ea2ab5a3283f13ac151a`.
+Build it with the CUDA toolkit matching PyTorch. On RTX 5090, use CUDA 12.8
+or newer and expose only the intended build GPU architecture:
 
-The dependency request is tracked in
-[PR #144](https://github.com/thu-ml/TurboDiffusion/pull/144#issuecomment-6518616283).
-Once upstream publishes a compatible build, its installation command and
-commit/tag must be recorded and validated here. There is no silent fallback:
-the SpargeAttn path raises an import error if the required API is missing.
-For a dense-attention reference, explicitly set `dit.attn_backend: sdpa` in
-a custom config; it is not the optimized profile and has different performance.
+```bash
+git clone https://github.com/thu-ml/SpargeAttn.git
+git -C SpargeAttn checkout ae5b629ebb41e41f86b3ea2ab5a3283f13ac151a
+CUDA_VISIBLE_DEVICES=0 env -u TORCH_CUDA_ARCH_LIST \
+  pip install ./SpargeAttn --no-build-isolation --no-deps
+```
+
+This revision's explicit `TORCH_CUDA_ARCH_LIST` allowlist predates SM120,
+so the command lets its build script detect the visible GPU instead.
+No SpargeAttn source patch is required for this adapter.
+
+`turbodiffusion/h3/attention.py` reuses the repository's pooled top-k block
+selection, then makes prefix/suffix query rows and key columns dense for
+text, audio and first-frame conditioning tokens. Blocks are Q128/K64
+(Q64/K128 on SM90), with sinks rounded up to block boundaries. The mask is
+passed as `mask_id`; `pvthreshd=1e6` disables additional PV-based skipping.
+The public top-k convenience function is not called because it does not
+accept H3's prefix/suffix sink lengths. The shared pooling helper explicitly
+zero-fills masked tail elements for sequences not divisible by the block size.
+
+This preserves the block-mask policy, not bitwise equivalence with the earlier
+local backend: quantization and accumulation inside the public kernel differ.
+Query sequences shorter than 128 tokens use SDPA because the public kernel
+does not support them. A missing public dependency raises an actionable error,
+not a silent fallback. For a fully dense reference, explicitly set
+`dit.attn_backend: sdpa`; it has different performance.
 
 ### NCCL on RTX 5090
 
@@ -228,14 +243,48 @@ this repository does not claim Wan2.2's speedup for H3.
 
 ## Validation Scope
 
-Local validation includes native W8A8 CUDA tests, full-model four-update DiT
-sampling with reused conditioning, and video/audio decoding with both BF16 and
-native W8A8 video VAEs. A same-latent VAE comparison was generated for the first
-benchmark case. These checks used the local SpargeAttn/NCCL environment described
-above, not a fresh public-only installation.
+Local validation includes native W8A8 CUDA tests and actual public SpargeAttn
+CUDA comparisons against the same block mask expanded for SDPA, including
+partial blocks and conditioning sinks. Run these after building the pinned
+public dependency:
 
-The latest offload-buffer sink propagation fix has a regression test; the
-full-model video run has not been repeated after that fix. The bundled
-text/keyframe encoding path and the default DBCache profile also still need
-full-model end-to-end validation. Unit tests do not establish quality or
-latency parity for those paths.
+```bash
+H3_TEST_PUBLIC_SPARGE=1 python -m unittest discover -s tests -p 'test_h3*.py' -v
+```
+
+The first five benchmark cases have been re-sampled with the offload-buffer
+sink propagation fix and conservative DBCache enabled. Each case compares the
+earlier local attention backend with the pinned public backend, holding the
+checkpoint, AdaLN table, conditioning, seed and native W8A8 settings fixed.
+All ten outputs were decoded with the native W8A8 video VAE and FP32 audio VAE.
+The five side-by-side MP4s retain all source frames and both audio tracks.
+Both backends had identical cache decisions: one hit out of four updates for
+cases 1 and 2, no hits for cases 3 through 5. Each timing follows a full warmup.
+Case 5 was restarted in a fresh worker group after a multi-shape compilation
+cache limit was observed; its earlier eager-communication draft is excluded.
+These shared RTX 5090 measurements are not a controlled latency benchmark.
+
+| Case | Duration | Earlier backend DiT | Public SpargeAttn DiT | Cache hits (both) |
+| --- | --- | --- | --- | --- |
+| 1 | 5 s | 9.56 s | 9.91 s | 1/4 |
+| 2 | 5 s | 9.82 s | 9.77 s | 1/4 |
+| 3 | 10 s | 22.66 s | 24.34 s | 0/4 |
+| 4 | 8 s | 19.13 s | 19.75 s | 0/4 |
+| 5 | 5 s | 12.30 s | 13.04 s | 0/4 |
+
+Timings exclude model loading, conditioning encoding and VAE decoding, and use
+the maximum synchronized sampling wall time over eight ranks. The public
+backend took about 4.5% longer in aggregate in this run. Visual spot-checks
+showed similar sharpness, with motion/framing differences especially in cases
+4 and 5. Decoded audio waveforms also differ, especially in cases 3 and 4;
+waveform similarity is not a perceptual quality score. The audio VAE is
+unchanged, and differences are already present in the sampled audio latents.
+These comparisons do not establish lossless equivalence or a quality ranking.
+Generated media and local benchmark data are not included in the repository.
+
+A same-latent BF16/native-W8A8 video VAE comparison was also generated for the
+first benchmark case. The validation environment retains the local NCCL
+binary described above; it is not a fresh public-only installation. The
+bundled text/keyframe encoding path and source-built NCCL still need full-model
+end-to-end validation. Unit tests do not establish quality or latency parity
+for those paths.
