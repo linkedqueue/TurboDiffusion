@@ -252,39 +252,7 @@ public dependency:
 H3_TEST_PUBLIC_SPARGE=1 python -m unittest discover -s tests -p 'test_h3*.py' -v
 ```
 
-The first five benchmark cases have been re-sampled with the offload-buffer
-sink propagation fix and conservative DBCache enabled. Each case compares the
-earlier local attention backend with the pinned public backend, holding the
-checkpoint, AdaLN table, conditioning, seed and native W8A8 settings fixed.
-All ten outputs were decoded with the native W8A8 video VAE and FP32 audio VAE.
-The five side-by-side MP4s retain all source frames and both audio tracks.
-Both backends had identical cache decisions: one hit out of four updates for
-cases 1 and 2, no hits for cases 3 through 5. Each timing follows a full warmup.
-Case 5 was restarted in a fresh worker group after a multi-shape compilation
-cache limit was observed; its earlier eager-communication draft is excluded.
-These shared RTX 5090 measurements are not a controlled latency benchmark.
-
-| Case | Duration | Earlier backend DiT | Public SpargeAttn DiT | Cache hits (both) |
-| --- | --- | --- | --- | --- |
-| 1 | 5 s | 9.56 s | 9.91 s | 1/4 |
-| 2 | 5 s | 9.82 s | 9.77 s | 1/4 |
-| 3 | 10 s | 22.66 s | 24.34 s | 0/4 |
-| 4 | 8 s | 19.13 s | 19.75 s | 0/4 |
-| 5 | 5 s | 12.30 s | 13.04 s | 0/4 |
-
-Timings exclude model loading, conditioning encoding and VAE decoding, and use
-the maximum synchronized sampling wall time over eight ranks. The public
-backend took about 4.5% longer in aggregate in this run. Visual spot-checks
-showed similar sharpness, with motion/framing differences especially in cases
-4 and 5. Decoded audio waveforms also differ, especially in cases 3 and 4;
-waveform similarity is not a perceptual quality score. The audio VAE is
-unchanged, and differences are already present in the sampled audio latents.
-These comparisons do not establish lossless equivalence or a quality ranking.
-Generated media and local benchmark data are not included in the repository.
-
-A same-latent BF16/native-W8A8 video VAE comparison was also generated for the
-first benchmark case. The validation environment retains the local NCCL
-binary described above; it is not a fresh public-only installation. The
-bundled text/keyframe encoding path and source-built NCCL still need full-model
-end-to-end validation. Unit tests do not establish quality or latency parity
-for those paths.
+The validation environment retains the local NCCL binary described above;
+it is not a fresh public-only installation. The bundled text/keyframe encoding
+path and source-built NCCL still need full-model end-to-end validation.
+Unit tests do not establish quality or latency parity for those paths.
